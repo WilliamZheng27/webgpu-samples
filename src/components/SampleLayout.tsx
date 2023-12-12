@@ -119,7 +119,11 @@ const SampleLayout: React.FunctionComponent<
     if (currentHash) {
       setActiveHash(currentHash[1]);
     } else {
-      setActiveHash(sources[0].name);
+      setActiveHash(
+        sources.length > 0
+          ? sources[0].name
+          : (Math.random() + 1).toString(36).substring(7)
+      );
     }
 
     if (gui && guiParentRef.current) {
