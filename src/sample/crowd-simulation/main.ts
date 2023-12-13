@@ -1,6 +1,10 @@
 import { makeSample, SampleInit } from '../../components/SampleLayout';
+import headerWGSL from "./computeHeader.wgsl";
 import spriteWGSL from './sprite.wgsl';
-import updateSpriteWGSL from './updateSprites.wgsl';
+import blendVelocityWGSL from "./blendVelocity.wgsl";
+import SRCollisionWGSL from "./SRCollision.wgsl";
+import LRCollisionWGSL from "./LRCollision.wgsl";
+import finalizeVelocityWGSL from "./finalizeVelocity.wgsl";
 
 const init: SampleInit = async ({ canvas, pageState, stats }) => {
   // WebGPU device initialization
@@ -10,7 +14,7 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
 
   const adapter = await navigator.gpu.requestAdapter();
   if (!adapter) {
-    throw new Error('No appropriate GPUAdapter found.');
+    throw new Error("No appropriate GPUAdapter found.");
   }
   const hasTimestampQuery = adapter.features.has('timestamp-query');
   const device = await adapter.requestDevice({
@@ -18,16 +22,22 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
   });
 
   // Canvas configuration
-  const context = canvas.getContext('webgpu');
+  const context = canvas.getContext("webgpu");
   const devicePixelRatio = window.devicePixelRatio;
   canvas.width = canvas.clientWidth * devicePixelRatio;
   canvas.height = canvas.clientHeight * devicePixelRatio;
   const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
   context.configure({
-    device: device,
-    format: canvasFormat,
-    alphaMode: 'premultiplied',
+      device: device,
+      format: canvasFormat,
+      alphaMode: 'premultiplied',
   });
+
+  const simParams = {
+    deltaT: 0.01,
+    stabilityIterations: 1,
+    constraintIterations: 6,
+  };
 
   // shaders
   const spriteShaderModule = device.createShaderModule({ code: spriteWGSL });
@@ -40,7 +50,7 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
       buffers: [
         {
           // instanced particles buffer
-          arrayStride: 4 * 4,
+          arrayStride: 8 * 4,
           stepMode: 'instance',
           attributes: [
             {
@@ -55,6 +65,18 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
               offset: 2 * 4,
               format: 'float32x2',
             },
+            {
+              // instance planed position
+              shaderLocation: 3,
+              offset: 4 * 4,
+              format: 'float32x2',
+            },
+            {
+              // instance goal
+              shaderLocation: 4,
+              offset: 6 * 4,
+              format: 'float32x2',
+            }
           ],
         },
         {
@@ -86,15 +108,84 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
     },
   });
 
-  const computePipeline = device.createComputePipeline({
-    layout: 'auto',
-    compute: {
-      module: device.createShaderModule({ code: updateSpriteWGSL }),
-      entryPoint: 'main',
-    },
+  // create compute pipelines
+  const computeShaders = [
+    headerWGSL + blendVelocityWGSL,
+    headerWGSL + SRCollisionWGSL,
+    headerWGSL + LRCollisionWGSL,
+    headerWGSL + finalizeVelocityWGSL,
+  ];
+  const iterations = [
+    1,
+    simParams.stabilityIterations,
+    simParams.constraintIterations,
+    1,
+  ];
+
+  var computeBindGroupLayout = device.createBindGroupLayout({
+    entries: [
+      {
+        binding: 0, // params
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: {
+          type: "uniform"
+        }
+      },
+      {
+        binding: 1, // agents_read
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: {
+          type: "read-only-storage"
+        }
+      },
+      {
+        binding: 2, // agents_write
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: {
+          type: "storage"
+        }
+      }
+    ]
   });
 
-  const renderPassDescriptor: GPURenderPassDescriptor = {
+  const computePipelines = [];
+  var pipelineLayout = device.createPipelineLayout({
+    bindGroupLayouts: [computeBindGroupLayout]
+  });
+
+
+  for(let i = 0; i < computeShaders.length; i++) {
+    for (let itr = 0; itr < iterations[i]; itr++) {
+      if (i == 2) // long range collision shader
+        computePipelines.push( 
+          device.createComputePipeline({
+          layout: pipelineLayout,
+          compute: {
+            module: device.createShaderModule({
+              code: computeShaders[i],
+            }),
+            entryPoint: 'main',
+            constants: {
+              1000 : itr + 1,
+            }
+          }})
+        );
+
+      else
+        computePipelines.push( 
+          device.createComputePipeline({
+          layout: pipelineLayout,
+          compute: {
+            module: device.createShaderModule({
+              code: computeShaders[i],
+            }),
+            entryPoint: 'main',
+          }})
+        );
+    }
+  }
+
+  const renderPassDescriptor = {
     colorAttachments: [
       {
         view: undefined, // Assigned later
@@ -107,7 +198,8 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
 
   const computePassDescriptor = {};
   const vertexBufferData = new Float32Array([
-    -0.01, -0.02, 0.01, -0.02, 0.0, 0.02,
+    -0.01, -0.02, 0.01,
+    -0.02, 0.0, 0.02,
   ]);
 
   const spriteVertexBuffer = device.createBuffer({
@@ -118,17 +210,8 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
   new Float32Array(spriteVertexBuffer.getMappedRange()).set(vertexBufferData);
   spriteVertexBuffer.unmap();
 
-  const simParams = {
-    deltaT: 0.04,
-    rule1Distance: 0.1,
-    rule2Distance: 0.025,
-    rule3Distance: 0.025,
-    rule1Scale: 0.02,
-    rule2Scale: 0.05,
-    rule3Scale: 0.005,
-  };
-
-  const simParamBufferSize = 7 * Float32Array.BYTES_PER_ELEMENT;
+  // pass parameters to the shaders (some params are omitted if not needed)
+  const simParamBufferSize = 1 * Float32Array.BYTES_PER_ELEMENT;
   const simParamBuffer = device.createBuffer({
     size: simParamBufferSize,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -138,43 +221,48 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
     0,
     new Float32Array([
       simParams.deltaT,
-      simParams.rule1Distance,
-      simParams.rule2Distance,
-      simParams.rule3Distance,
-      simParams.rule1Scale,
-      simParams.rule2Scale,
-      simParams.rule3Scale,
     ])
   );
 
   // can be updated with GUI, not implemented here (https://webgpu.github.io/webgpu-samples/samples/computeBoids#main.ts)
 
-  const numParticles = 1500;
-  const initialParticleData = new Float32Array(numParticles * 4);
-  for (let i = 0; i < numParticles; ++i) {
-    initialParticleData[4 * i + 0] = 2 * (Math.random() - 0.5);
-    initialParticleData[4 * i + 1] = 2 * (Math.random() - 0.5);
-    initialParticleData[4 * i + 2] = 2 * (Math.random() - 0.5) * 0.1;
-    initialParticleData[4 * i + 3] = 2 * (Math.random() - 0.5) * 0.1;
+  const numAgents = 1500;
+  const initialAgentData = new Float32Array(numAgents * 8);
+  const goals = [
+    [1.0, 1.0], [-1.0, -1.0]
+  ];
+  for (let i = 0; i < numAgents; ++i) {
+    // position
+    initialAgentData[8 * i + 0] = 2 * (Math.random() - 0.5);
+    initialAgentData[8 * i + 1] = 2 * (Math.random() - 0.5);
+    // velocity
+    initialAgentData[8 * i + 2] = 2 * (Math.random() - 0.5) * 0.1;
+    initialAgentData[8 * i + 3] = 2 * (Math.random() - 0.5) * 0.1;
+    // planed / predicted position (initial value doesn't matter)
+    initialAgentData[8 * i + 4] = initialAgentData[8 * i + 0]
+    initialAgentData[8 * i + 5] = initialAgentData[8 * i + 1]
+    // goal
+    initialAgentData[8 * i + 6] = i % 2 == 0? goals[0][0] : goals[1][0];
+    initialAgentData[8 * i + 7] = i % 2 == 0? goals[0][1] : goals[1][1];
   }
 
-  const particleBuffers = new Array(2);
-  const particleBindGroups = new Array(2);
+  const agentBuffers = new Array(2);
+  const computeBindGroups = new Array(2);
   for (let i = 0; i < 2; ++i) {
-    particleBuffers[i] = device.createBuffer({
-      size: initialParticleData.byteLength,
+    agentBuffers[i] = device.createBuffer({
+      size: initialAgentData.byteLength,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE,
       mappedAtCreation: true,
     });
-    new Float32Array(particleBuffers[i].getMappedRange()).set(
-      initialParticleData
+    new Float32Array(agentBuffers[i].getMappedRange()).set(
+      initialAgentData
     );
-    particleBuffers[i].unmap();
+    agentBuffers[i].unmap();
   }
 
   for (let i = 0; i < 2; ++i) {
-    particleBindGroups[i] = device.createBindGroup({
-      layout: computePipeline.getBindGroupLayout(0),
+    computeBindGroups[i] = device.createBindGroup({
+      layout: computeBindGroupLayout,
       entries: [
         {
           binding: 0,
@@ -185,17 +273,17 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
         {
           binding: 1,
           resource: {
-            buffer: particleBuffers[i],
+            buffer: agentBuffers[i],
             offset: 0,
-            size: initialParticleData.byteLength,
+            size: initialAgentData.byteLength,
           },
         },
         {
           binding: 2,
           resource: {
-            buffer: particleBuffers[(i + 1) % 2],
+            buffer: agentBuffers[(i + 1) % 2],
             offset: 0,
-            size: initialParticleData.byteLength,
+            size: initialAgentData.byteLength,
           },
         },
       ],
@@ -203,9 +291,21 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
   }
 
   let t = 0;
+  var computeBindGroup = computeBindGroups[0];
+  function switchBindGroup() {
+    if (computeBindGroup == computeBindGroups[0])
+      computeBindGroup = computeBindGroups[1];
+    else if (computeBindGroup == computeBindGroups[1])
+      computeBindGroup = computeBindGroups[0];
+  }
+  function getRenderBuffer() {
+    if (computeBindGroup == computeBindGroups[0])
+      return agentBuffers[0];
+    else if (computeBindGroup == computeBindGroups[1])
+      return agentBuffers[1];
+  }
+
   function frame() {
-    // Sample is no longer the active page.
-    if (!pageState.active) return;
     stats.begin();
     renderPassDescriptor.colorAttachments[0].view = context
       .getCurrentTexture()
@@ -216,17 +316,22 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
       const passEncoder = commandEncoder.beginComputePass(
         computePassDescriptor
       );
-      passEncoder.setPipeline(computePipeline);
-      passEncoder.setBindGroup(0, particleBindGroups[t % 2]);
-      passEncoder.dispatchWorkgroups(Math.ceil(numParticles / 64));
+      
+      for (let i = 0; i < computePipelines.length; i++) {
+        passEncoder.setPipeline(computePipelines[i]);
+        passEncoder.setBindGroup(0, computeBindGroup);
+        passEncoder.dispatchWorkgroups(Math.ceil(numAgents / 64));
+        switchBindGroup();
+      }
+
       passEncoder.end();
     }
     {
       const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
       passEncoder.setPipeline(renderPipeline);
-      passEncoder.setVertexBuffer(0, particleBuffers[(t + 1) % 2]);
+      passEncoder.setVertexBuffer(0, getRenderBuffer());
       passEncoder.setVertexBuffer(1, spriteVertexBuffer);
-      passEncoder.draw(3, numParticles, 0, 0);
+      passEncoder.draw(3, numAgents, 0, 0);
       passEncoder.end();
     }
 
