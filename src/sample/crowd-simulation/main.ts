@@ -1,12 +1,12 @@
 import { makeSample, SampleInit } from '../../components/SampleLayout';
-import headerWGSL from "./computeHeader.wgsl";
+import headerWGSL from './computeHeader.wgsl';
 import spriteWGSL from './sprite.wgsl';
-import blendVelocityWGSL from "./blendVelocity.wgsl";
-import SRCollisionWGSL from "./SRCollision.wgsl";
-import LRCollisionWGSL from "./LRCollision.wgsl";
-import finalizeVelocityWGSL from "./finalizeVelocity.wgsl";
+import blendVelocityWGSL from './blendVelocity.wgsl';
+import SRCollisionWGSL from './SRCollision.wgsl';
+import LRCollisionWGSL from './LRCollision.wgsl';
+import finalizeVelocityWGSL from './finalizeVelocity.wgsl';
 
-const init: SampleInit = async ({ canvas, pageState, stats }) => {
+const init: SampleInit = async ({ canvas, stats }) => {
   // WebGPU device initialization
   if (!navigator.gpu) {
     throw new Error('WebGPU not supported on this browser.');
@@ -14,7 +14,7 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
 
   const adapter = await navigator.gpu.requestAdapter();
   if (!adapter) {
-    throw new Error("No appropriate GPUAdapter found.");
+    throw new Error('No appropriate GPUAdapter found.');
   }
   const hasTimestampQuery = adapter.features.has('timestamp-query');
   const device = await adapter.requestDevice({
@@ -22,15 +22,15 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
   });
 
   // Canvas configuration
-  const context = canvas.getContext("webgpu");
+  const context = canvas.getContext('webgpu');
   const devicePixelRatio = window.devicePixelRatio;
   canvas.width = canvas.clientWidth * devicePixelRatio;
   canvas.height = canvas.clientHeight * devicePixelRatio;
   const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
   context.configure({
-      device: device,
-      format: canvasFormat,
-      alphaMode: 'premultiplied',
+    device: device,
+    format: canvasFormat,
+    alphaMode: 'premultiplied',
   });
 
   const simParams = {
@@ -76,7 +76,7 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
               shaderLocation: 4,
               offset: 6 * 4,
               format: 'float32x2',
-            }
+            },
           ],
         },
         {
@@ -122,70 +122,71 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
     1,
   ];
 
-  var computeBindGroupLayout = device.createBindGroupLayout({
+  const computeBindGroupLayout = device.createBindGroupLayout({
     entries: [
       {
         binding: 0, // params
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
-          type: "uniform"
-        }
+          type: 'uniform',
+        },
       },
       {
         binding: 1, // agents_read
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
-          type: "read-only-storage"
-        }
+          type: 'read-only-storage',
+        },
       },
       {
         binding: 2, // agents_write
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
-          type: "storage"
-        }
-      }
-    ]
+          type: 'storage',
+        },
+      },
+    ],
   });
 
   const computePipelines = [];
-  var pipelineLayout = device.createPipelineLayout({
-    bindGroupLayouts: [computeBindGroupLayout]
+  const pipelineLayout = device.createPipelineLayout({
+    bindGroupLayouts: [computeBindGroupLayout],
   });
 
-
-  for(let i = 0; i < computeShaders.length; i++) {
+  for (let i = 0; i < computeShaders.length; i++) {
     for (let itr = 0; itr < iterations[i]; itr++) {
-      if (i == 2) // long range collision shader
-        computePipelines.push( 
+      if (i == 2)
+        // long range collision shader
+        computePipelines.push(
           device.createComputePipeline({
-          layout: pipelineLayout,
-          compute: {
-            module: device.createShaderModule({
-              code: computeShaders[i],
-            }),
-            entryPoint: 'main',
-            constants: {
-              1000 : itr + 1,
-            }
-          }})
+            layout: pipelineLayout,
+            compute: {
+              module: device.createShaderModule({
+                code: computeShaders[i],
+              }),
+              entryPoint: 'main',
+              constants: {
+                1000: itr + 1,
+              },
+            },
+          })
         );
-
       else
-        computePipelines.push( 
+        computePipelines.push(
           device.createComputePipeline({
-          layout: pipelineLayout,
-          compute: {
-            module: device.createShaderModule({
-              code: computeShaders[i],
-            }),
-            entryPoint: 'main',
-          }})
+            layout: pipelineLayout,
+            compute: {
+              module: device.createShaderModule({
+                code: computeShaders[i],
+              }),
+              entryPoint: 'main',
+            },
+          })
         );
     }
   }
 
-  const renderPassDescriptor = {
+  const renderPassDescriptor: GPURenderPassDescriptor = {
     colorAttachments: [
       {
         view: undefined, // Assigned later
@@ -198,8 +199,7 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
 
   const computePassDescriptor = {};
   const vertexBufferData = new Float32Array([
-    -0.01, -0.02, 0.01,
-    -0.02, 0.0, 0.02,
+    -0.01, -0.02, 0.01, -0.02, 0.0, 0.02,
   ]);
 
   const spriteVertexBuffer = device.createBuffer({
@@ -219,9 +219,7 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
   device.queue.writeBuffer(
     simParamBuffer,
     0,
-    new Float32Array([
-      simParams.deltaT,
-    ])
+    new Float32Array([simParams.deltaT])
   );
 
   // can be updated with GUI, not implemented here (https://webgpu.github.io/webgpu-samples/samples/computeBoids#main.ts)
@@ -229,7 +227,8 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
   const numAgents = 1500;
   const initialAgentData = new Float32Array(numAgents * 8);
   const goals = [
-    [1.0, 1.0], [-1.0, -1.0]
+    [1.0, 1.0],
+    [-1.0, -1.0],
   ];
   for (let i = 0; i < numAgents; ++i) {
     // position
@@ -239,11 +238,11 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
     initialAgentData[8 * i + 2] = 2 * (Math.random() - 0.5) * 0.1;
     initialAgentData[8 * i + 3] = 2 * (Math.random() - 0.5) * 0.1;
     // planed / predicted position (initial value doesn't matter)
-    initialAgentData[8 * i + 4] = initialAgentData[8 * i + 0]
-    initialAgentData[8 * i + 5] = initialAgentData[8 * i + 1]
+    initialAgentData[8 * i + 4] = initialAgentData[8 * i + 0];
+    initialAgentData[8 * i + 5] = initialAgentData[8 * i + 1];
     // goal
-    initialAgentData[8 * i + 6] = i % 2 == 0? goals[0][0] : goals[1][0];
-    initialAgentData[8 * i + 7] = i % 2 == 0? goals[0][1] : goals[1][1];
+    initialAgentData[8 * i + 6] = i % 2 == 0 ? goals[0][0] : goals[1][0];
+    initialAgentData[8 * i + 7] = i % 2 == 0 ? goals[0][1] : goals[1][1];
   }
 
   const agentBuffers = new Array(2);
@@ -254,9 +253,7 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE,
       mappedAtCreation: true,
     });
-    new Float32Array(agentBuffers[i].getMappedRange()).set(
-      initialAgentData
-    );
+    new Float32Array(agentBuffers[i].getMappedRange()).set(initialAgentData);
     agentBuffers[i].unmap();
   }
 
@@ -290,8 +287,7 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
     });
   }
 
-  let t = 0;
-  var computeBindGroup = computeBindGroups[0];
+  let computeBindGroup = computeBindGroups[0];
   function switchBindGroup() {
     if (computeBindGroup == computeBindGroups[0])
       computeBindGroup = computeBindGroups[1];
@@ -299,10 +295,8 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
       computeBindGroup = computeBindGroups[0];
   }
   function getRenderBuffer() {
-    if (computeBindGroup == computeBindGroups[0])
-      return agentBuffers[0];
-    else if (computeBindGroup == computeBindGroups[1])
-      return agentBuffers[1];
+    if (computeBindGroup == computeBindGroups[0]) return agentBuffers[0];
+    else if (computeBindGroup == computeBindGroups[1]) return agentBuffers[1];
   }
 
   function frame() {
@@ -316,7 +310,7 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
       const passEncoder = commandEncoder.beginComputePass(
         computePassDescriptor
       );
-      
+
       for (let i = 0; i < computePipelines.length; i++) {
         passEncoder.setPipeline(computePipelines[i]);
         passEncoder.setBindGroup(0, computeBindGroup);
@@ -337,7 +331,6 @@ const init: SampleInit = async ({ canvas, pageState, stats }) => {
 
     device.queue.submit([commandEncoder.finish()]);
 
-    ++t;
     stats.end();
     requestAnimationFrame(frame);
   }
@@ -353,7 +346,7 @@ const CrowdSimulation: () => JSX.Element = () =>
   makeSample({
     name: 'Crowd Simulation',
     description:
-      'This example shows how to render and sample from a cubemap texture.',
+      'This example shows an algorithm to simulate crowd movement and interaction (see )',
     init,
     gui: true,
     stats: true,
