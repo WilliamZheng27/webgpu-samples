@@ -73,7 +73,21 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
         var w = 0.5;
         var dx = -w * f * n;
 
-        // 4.5 Avoidance Model (not implemented)
+        // 4.5 Avoidance Model
+        if (params.avoidance == 1.0f) {
+          // get collision-free position
+          xi_collision = xi_collision + dx;
+          xj_collision = xj_collision - dx;
+
+          // total relative displacement
+          var d_vec = (xi_collision - xi_nocollision) - (xj_collision - xj_nocollision);
+
+          // tangential relative displacement
+          var d_tangent = d_vec - dot(d_vec, n)*n; 
+
+          dx = dx + w * d_tangent;
+          neighborCount = neighborCount + 1;
+        }
 
         totalDx = totalDx + k * dx;
         neighborCount = neighborCount + 1;

@@ -7,6 +7,7 @@ struct Agent {
 struct SimParams {
   deltaT : f32,
   agentScale : f32,
+  avoidance: f32,
 }
 struct Agents {
   agents : array<Agent>,

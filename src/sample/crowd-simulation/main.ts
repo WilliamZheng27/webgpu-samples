@@ -34,7 +34,8 @@ const init: SampleInit = async ({ canvas, stats, gui }) => {
     deltaT: 0.02,
     stabilityIterations: 1,
     constraintIterations: 6,
-    numAgents: 64, // MUST be power of 2
+    numAgents: 4096, // MUST be power of 2
+    avoidance: true,
     agentScale: 0,
   };
   simParams.agentScale =
@@ -220,7 +221,7 @@ const init: SampleInit = async ({ canvas, stats, gui }) => {
   spriteVertexBuffer.unmap();
 
   // pass parameters to the shaders (some params are omitted if not needed)
-  const simParamBufferSize = 2 * Float32Array.BYTES_PER_ELEMENT;
+  const simParamBufferSize = 3 * Float32Array.BYTES_PER_ELEMENT;
   const simParamBuffer = device.createBuffer({
     size: simParamBufferSize,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -228,7 +229,7 @@ const init: SampleInit = async ({ canvas, stats, gui }) => {
   device.queue.writeBuffer(
     simParamBuffer,
     0,
-    new Float32Array([simParams.deltaT, simParams.agentScale])
+    new Float32Array([simParams.deltaT, simParams.agentScale, simParams.avoidance? 1.0 : 0.0])
   );
 
   // can be updated with GUI, not implemented here (https://webgpu.github.io/webgpu-samples/samples/computeBoids#main.ts)
