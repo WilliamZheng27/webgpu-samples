@@ -197,14 +197,7 @@ const SampleLayout: React.FunctionComponent<
       </Head>
       <div>
         <h1>{props.name}</h1>
-        <a
-          target="_blank"
-          rel="noreferrer"
-          href={`https://github.com/${process.env.REPOSITORY_NAME}/tree/main/${props.filename}`}
-        >
-          See it on Github!
-        </a>
-        <p>{props.description}</p>
+        {/*<p>{props.description}</p>*/}
         {error ? (
           <>
             <p>

@@ -35,7 +35,7 @@ const init: SampleInit = async ({ canvas, stats }) => {
     stabilityIterations: 1,
     constraintIterations: 6,
     numAgents: 8192, // MUST be power of 2
-    avoidance: true,
+    avoidance: false,
     agentScale: 0,
   };
   simParams.agentScale =
@@ -404,9 +404,9 @@ const init: SampleInit = async ({ canvas, stats }) => {
   requestAnimationFrame(frame);
 };
 
-const CrowdSimulation: () => JSX.Element = () =>
+const CrowdSimulationNoAvoid: () => JSX.Element = () =>
   makeSample({
-    name: 'Avoidance on',
+    name: 'Avoidance Off',
     description:
       'This example shows an algorithm to simulate crowd movement and interaction (see )',
     init,
@@ -416,4 +416,4 @@ const CrowdSimulation: () => JSX.Element = () =>
     filename: __filename,
   });
 
-export default CrowdSimulation;
+export default CrowdSimulationNoAvoid;
