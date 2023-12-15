@@ -1,12 +1,12 @@
 import { makeSample, SampleInit } from '../../components/SampleLayout';
-import headerWGSL from './computeHeader.wgsl';
-import spriteWGSL from './sprite.wgsl';
-import blendVelocityWGSL from './blendVelocity.wgsl';
-import SRCollisionWGSL from './SRCollision.wgsl';
-import LRCollisionWGSL from './LRCollision.wgsl';
-import finalizeVelocityWGSL from './finalizeVelocity.wgsl';
+import headerWGSL from './wgsl/computeHeader.wgsl';
+import spriteWGSL from './wgsl/sprite.wgsl';
+import blendVelocityWGSL from './wgsl/blendVelocity.wgsl';
+import SRCollisionWGSL from './wgsl/SRCollision.wgsl';
+import LRCollisionWGSL from './wgsl/LRCollision.wgsl';
+import finalizeVelocityWGSL from './wgsl/finalizeVelocity.wgsl';
 
-const init: SampleInit = async ({ canvas, stats }) => {
+const init: SampleInit = async ({ canvas, stats, gui }) => {
   // WebGPU device initialization
   if (!navigator.gpu) {
     throw new Error('WebGPU not supported on this browser.');
@@ -16,10 +16,7 @@ const init: SampleInit = async ({ canvas, stats }) => {
   if (!adapter) {
     throw new Error('No appropriate GPUAdapter found.');
   }
-  const hasTimestampQuery = adapter.features.has('timestamp-query');
-  const device = await adapter.requestDevice({
-    requiredFeatures: hasTimestampQuery ? ['timestamp-query'] : [],
-  });
+  const device = await adapter.requestDevice({});
 
   // Canvas configuration
   const context = canvas.getContext('webgpu');
@@ -34,10 +31,19 @@ const init: SampleInit = async ({ canvas, stats }) => {
   });
 
   const simParams = {
-    deltaT: 0.01,
+    deltaT: 0.02,
     stabilityIterations: 1,
     constraintIterations: 6,
+    numAgents: 64, // MUST be power of 2
+    agentScale: 0,
   };
+  simParams.agentScale =
+    0.5 **
+    Math.max(
+      0.0,
+      Math.floor(Math.log(simParams.numAgents / 512) / Math.log(4))
+    );
+  gui.add(simParams, 'numAgents');
 
   // shaders
   const spriteShaderModule = device.createShaderModule({ code: spriteWGSL });
@@ -201,6 +207,9 @@ const init: SampleInit = async ({ canvas, stats }) => {
   const vertexBufferData = new Float32Array([
     -0.01, -0.02, 0.01, -0.02, 0.0, 0.02,
   ]);
+  for (let i = 0; i < vertexBufferData.length; i++) {
+    vertexBufferData[i] *= simParams.agentScale;
+  }
 
   const spriteVertexBuffer = device.createBuffer({
     size: vertexBufferData.byteLength,
@@ -211,7 +220,7 @@ const init: SampleInit = async ({ canvas, stats }) => {
   spriteVertexBuffer.unmap();
 
   // pass parameters to the shaders (some params are omitted if not needed)
-  const simParamBufferSize = 1 * Float32Array.BYTES_PER_ELEMENT;
+  const simParamBufferSize = 2 * Float32Array.BYTES_PER_ELEMENT;
   const simParamBuffer = device.createBuffer({
     size: simParamBufferSize,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -219,30 +228,80 @@ const init: SampleInit = async ({ canvas, stats }) => {
   device.queue.writeBuffer(
     simParamBuffer,
     0,
-    new Float32Array([simParams.deltaT])
+    new Float32Array([simParams.deltaT, simParams.agentScale])
   );
 
   // can be updated with GUI, not implemented here (https://webgpu.github.io/webgpu-samples/samples/computeBoids#main.ts)
+  const scene = {
+    RANDOM: 0,
+    SQUARE: 1,
+    CIRCLE: 2,
+  };
+  const selectedScene = scene.SQUARE;
 
-  const numAgents = 1500;
-  const initialAgentData = new Float32Array(numAgents * 8);
-  const goals = [
-    [1.0, 1.0],
-    [-1.0, -1.0],
-  ];
-  for (let i = 0; i < numAgents; ++i) {
-    // position
-    initialAgentData[8 * i + 0] = 2 * (Math.random() - 0.5);
-    initialAgentData[8 * i + 1] = 2 * (Math.random() - 0.5);
-    // velocity
-    initialAgentData[8 * i + 2] = 2 * (Math.random() - 0.5) * 0.1;
-    initialAgentData[8 * i + 3] = 2 * (Math.random() - 0.5) * 0.1;
-    // planed / predicted position (initial value doesn't matter)
-    initialAgentData[8 * i + 4] = initialAgentData[8 * i + 0];
-    initialAgentData[8 * i + 5] = initialAgentData[8 * i + 1];
-    // goal
-    initialAgentData[8 * i + 6] = i % 2 == 0 ? goals[0][0] : goals[1][0];
-    initialAgentData[8 * i + 7] = i % 2 == 0 ? goals[0][1] : goals[1][1];
+  const initialAgentData = new Float32Array(simParams.numAgents * 8);
+  for (let i = 0; i < simParams.numAgents; ++i) {
+    if (selectedScene == scene.RANDOM) {
+      const goals = [
+        [1.0, 1.0],
+        [-1.0, -1.0],
+      ];
+      // position
+      initialAgentData[8 * i + 0] = 2 * (Math.random() - 0.5);
+      initialAgentData[8 * i + 1] = 2 * (Math.random() - 0.5);
+      // velocity
+      initialAgentData[8 * i + 2] = 2 * (Math.random() - 0.5) * 0.1;
+      initialAgentData[8 * i + 3] = 2 * (Math.random() - 0.5) * 0.1;
+      // planed / predicted position (initial value doesn't matter)
+      initialAgentData[8 * i + 4] = initialAgentData[8 * i + 0];
+      initialAgentData[8 * i + 5] = initialAgentData[8 * i + 1];
+      // goal
+      initialAgentData[8 * i + 6] = i % 2 == 0 ? goals[0][0] : goals[1][0];
+      initialAgentData[8 * i + 7] = i % 2 == 0 ? goals[0][1] : goals[1][1];
+    } else if (selectedScene == scene.SQUARE) {
+      const y_margin = 0.2;
+      const x_margin = 0.2;
+      // boundary is a bounding box represented by [xMin, yMin], [xMax, yMax]
+      const topBoundary = [
+        [x_margin - 1.0, y_margin],
+        [1.0 - x_margin, 1.0 - y_margin],
+      ];
+      const botBoundary = [
+        [x_margin - 1.0, y_margin - 1.0],
+        [1.0 - x_margin, -y_margin],
+      ];
+      const boundary = i % 2 == 0 ? topBoundary : botBoundary;
+      const velocity = i % 2 == 0 ? [0, -0.1] : [0, 0.1];
+      const goal = i % 2 == 0 ? [0, -1.0] : [0, 1.0];
+      const Idx = Math.floor(i / 2);
+      const power = Math.log2(simParams.numAgents / 2);
+      const x_count = 2 ** Math.ceil(power / 2);
+      const y_count = 2 ** Math.floor(power / 2);
+      const x_offset = (boundary[1][0] - boundary[0][0]) / x_count;
+      const y_offset = (boundary[1][1] - boundary[0][1]) / y_count;
+      const x_idx = Idx % x_count;
+      const y_idx = Math.floor(Idx / x_count);
+
+      // position
+      const randomVal = 2 * (Math.random() - 0.5);
+      const perturbation = [
+        (x_offset * randomVal) / 5.0,
+        (y_offset * randomVal) / 5.0,
+      ];
+      initialAgentData[8 * i + 0] =
+        boundary[0][0] + x_idx * x_offset + perturbation[0];
+      initialAgentData[8 * i + 1] =
+        boundary[0][1] + y_idx * y_offset + perturbation[1];
+      // velocity
+      initialAgentData[8 * i + 2] = velocity[0] * simParams.agentScale;
+      initialAgentData[8 * i + 3] = velocity[1] * simParams.agentScale;
+      // planed / predicted position (initial value doesn't matter)
+      initialAgentData[8 * i + 4] = initialAgentData[8 * i + 0];
+      initialAgentData[8 * i + 5] = initialAgentData[8 * i + 1];
+      // goal
+      initialAgentData[8 * i + 6] = goal[0];
+      initialAgentData[8 * i + 7] = goal[1];
+    }
   }
 
   const agentBuffers = new Array(2);
@@ -314,7 +373,7 @@ const init: SampleInit = async ({ canvas, stats }) => {
       for (let i = 0; i < computePipelines.length; i++) {
         passEncoder.setPipeline(computePipelines[i]);
         passEncoder.setBindGroup(0, computeBindGroup);
-        passEncoder.dispatchWorkgroups(Math.ceil(numAgents / 64));
+        passEncoder.dispatchWorkgroups(Math.ceil(simParams.numAgents / 64));
         switchBindGroup();
       }
 
@@ -325,12 +384,11 @@ const init: SampleInit = async ({ canvas, stats }) => {
       passEncoder.setPipeline(renderPipeline);
       passEncoder.setVertexBuffer(0, getRenderBuffer());
       passEncoder.setVertexBuffer(1, spriteVertexBuffer);
-      passEncoder.draw(3, numAgents, 0, 0);
+      passEncoder.draw(3, simParams.numAgents, 0, 0);
       passEncoder.end();
     }
 
     device.queue.submit([commandEncoder.finish()]);
-
     stats.end();
     requestAnimationFrame(frame);
   }

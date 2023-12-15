@@ -17,11 +17,11 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
     var agent_j = agents_r.agents[j];
     var n = agent.ppos - agent_j.ppos;
     var d = length(n);
-    if (d > nearRadius) {
+    if (d > nearRadius * params.agentScale) {
       continue;
     }
 
-    var f = d - (2.0 * agentRadius); // assume all agents have same size
+    var f = d - (2.0 * agentRadius * params.agentScale); // assume all agents have same size
     if (f < 0.0) {
       // 4.2 Short Range Collision
       n = normalize(n);

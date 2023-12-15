@@ -11,8 +11,7 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
   // TODO: consider ignoring the particle when it's close enough to the goal
 
   // 4.1 velocity blending 
-  // (https://github.com/wayne-wu/webgpu-crowd-simulation/blob/main/src/shaders/explicitIntegration.compute.wgsl)
-  var vp = normalize(goal - agent.pos) * agentSpeed;
+  var vp = normalize(goal - agent.pos) * agentSpeed * params.agentScale;
   agent.vel = (1.0 - blendFactor) * agent.vel + blendFactor * vp;
   agent.ppos = agent.pos + params.deltaT * agent.vel;
 

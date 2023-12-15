@@ -6,16 +6,17 @@ struct Agent {
 }
 struct SimParams {
   deltaT : f32,
+  agentScale : f32,
 }
 struct Agents {
   agents : array<Agent>,
 }
 
 // constants copied from the paper
-const agentSpeed : f32 = 1.4;
-const nearRadius : f32 = 2.0;      // threshold for SR collision
-const farRadius : f32 = 5.0;       // threshold for LR collision
-const cohesionRadius : f32 = 5.0;  // threshold for cohesion
+const agentSpeed : f32 = 0.1;
+const nearRadius : f32 = 0.2;      // threshold for SR collision
+const farRadius : f32 = 0.5;       // threshold for LR collision
+const cohesionRadius : f32 = 1.0;  // threshold for cohesion
 const agentRadius : f32 = 0.03;    // agent size
 const blendFactor : f32 = 0.0385;
 const k_shortrange : f32 = 1.0;

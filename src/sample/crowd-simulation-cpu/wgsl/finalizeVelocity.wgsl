@@ -35,7 +35,7 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
     }
 
     var d = distance(agent.ppos, agent_j.ppos);
-    if (d > cohesionRadius){
+    if (d > cohesionRadius * params.agentScale){
       continue;
     }
     var w = poly6Kernel(d*d);
@@ -46,7 +46,7 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
 
   // 4.6 Maximum Speed and Acceleration Limiting
   var dir = normalize(agent.vel);
-  var maxSpeed : f32 = 1.2 * agentSpeed;
+  var maxSpeed : f32 = 1.2 * agentSpeed * params.agentScale;
   if(length(agent.vel) > maxSpeed){
     agent.vel = maxSpeed * dir;
   }

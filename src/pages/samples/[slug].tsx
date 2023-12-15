@@ -50,6 +50,9 @@ export const pages: PageComponentType = {
   bitonicSort: dynamic(() => import('../../sample/bitonicSort/main')),
   normalMap: dynamic(() => import('../../sample/normalMap/main')),
   crowdSimulation: dynamic(() => import('../../sample/crowd-simulation/main')),
+  crowdSimulationCPU: dynamic(
+    () => import('../../sample/crowd-simulation-cpu/main')
+  ),
 };
 
 function Page({ slug }: Props): JSX.Element {
